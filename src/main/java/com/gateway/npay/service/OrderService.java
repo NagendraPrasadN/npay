@@ -28,6 +28,7 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final ApplicationEventPublisher eventPublisher;
 
+    @Transactional
     public OrderResponse placeOrder(@Valid OrderRequest request) {
       Product product = productRepository.findById(request.productId()).orElseThrow(() -> new RuntimeException("Product not found"));
       if(product.getStockQuantity() < request.quantity()){

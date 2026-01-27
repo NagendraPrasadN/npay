@@ -8,7 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 @Service
-@Transactional
+
 public class ProductService {
 
 
@@ -18,14 +18,16 @@ public class ProductService {
         this.repository = repository;
     }
 
+    @Transactional
     public Product create(Product product) {
       return  repository.save(product);
     }
-
+    @Transactional(readOnly = true)
     public List<Product> getAll(){
         return repository.findAll();
     }
 
+    @Transactional
     public Product update(Long id, Product updatedProduct) {
         return repository.findById(id).map(product -> {
             product.setName(updatedProduct.getName());
@@ -36,6 +38,7 @@ public class ProductService {
         }).orElseThrow(() -> new RuntimeException("Product not found"));
     }
 
+    @Transactional
     public void delete(Long id) {
         if (!repository.existsById(id)) {
             throw new RuntimeException("Product not found");
