@@ -1,6 +1,7 @@
 package com.gateway.npay.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+
+import com.gateway.npay.dto.OrderItemDto;
 import com.gateway.npay.dto.OrderPlacedEvent;
 import com.gateway.npay.dto.OrderRequest;
 import com.gateway.npay.entity.Order;
@@ -16,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,11 +31,11 @@ public class OrderService {
 
     private final ProductRepository productRepository;
     private final OrderRepository orderRepository;
-    private final ApplicationEventPublisher eventPublisher;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
 
     @Transactional
-    @CacheEvict(value = "order", key = "#order.productId")
+    @CacheEvict(value = "order", key = "#request.productId")
     public OrderResponse placeOrder(@Valid OrderRequest request) {
       Product product = productRepository.findById(request.productId()).orElseThrow(() -> new RuntimeException("Product not found"));
       if(product.getStockQuantity() < request.quantity()){
@@ -51,9 +53,11 @@ public class OrderService {
                 .build();
         order.setItems(List.of(item));
         Order saved = orderRepository.save(order);
-        eventPublisher.publishEvent(
-                new OrderPlacedEvent(saved.getId())
-        );
+
+        OrderPlacedEvent event = new OrderPlacedEvent(saved.getId(),
+                        saved.getCreatedAt(),
+                        saved.getItems().stream().map(OrderItemDto::from).toList());
+        kafkaTemplate.executeInTransaction(kt-> kt.send("order-created", saved.getId().toString(), event));
         return map(saved);
     }
 

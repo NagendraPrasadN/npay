@@ -1,6 +1,7 @@
 package com.gateway.npay.service;
 
 import com.gateway.npay.component.MockPaymentGateway;
+import com.gateway.npay.dto.PaymentCompletedEvent;
 import com.gateway.npay.entity.Order;
 import com.gateway.npay.entity.Payment;
 import com.gateway.npay.enums.OrderStatus;
@@ -8,6 +9,7 @@ import com.gateway.npay.enums.PaymentStatus;
 import com.gateway.npay.repository.OrderRepository;
 import com.gateway.npay.repository.PaymentRepository;
 import lombok.AllArgsConstructor;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Recover;
 import org.springframework.retry.annotation.Retryable;
@@ -22,6 +24,7 @@ public class PaymentService {
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
     private final MockPaymentGateway gateway;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
     @Transactional
     @Retryable(
@@ -68,7 +71,16 @@ public class PaymentService {
         order.setStatus(OrderStatus.PAID);
         orderRepository.save(order);
 
+        publishPaymentEvent(orderId, amount, PaymentStatus.SUCCESS);
+
         return payment;
+    }
+
+    private void publishPaymentEvent(Long orderId, Double amount, PaymentStatus status) {
+        PaymentCompletedEvent event = new PaymentCompletedEvent(orderId, amount, status);
+        kafkaTemplate.executeInTransaction(kt ->
+                kt.send("payment-completed", orderId.toString(), event)
+        );
     }
 
     private Double calculateOrderAmount(Order order) {
